@@ -1,0 +1,6 @@
+{
+  "name": "Đua Người Que 2D",
+  "description": "Game đua người que 2D nhịp điệu Q/E với sảnh chờ tương tác, bỏ phiếu bản đồ, kỹ năng nhân vật và đường đua kịch tính.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

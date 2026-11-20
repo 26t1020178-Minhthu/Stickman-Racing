@@ -1,0 +1,879 @@
+Nhìn vào ảnh chụp VS Code của bạn (chữ index.html có dấu chấm tròn trắng chưa lưu và dòng chữ đỏ báo 6 lỗi màu đỏ ở góc dưới bên trái ⊗ 6), mình thấy ngay 2 nguyên nhân:
+1. Bạn đang mở nhầm file index.html nằm trong thư mục ITJAM thay vì stickboi (hoặc file chưa được lưu Ctrl + S).
+2. Trong code trước vẫn bị hệ thống làm mất 3 cặp dấu ngoặc vuông mảng (new Array() thay cho [] sẽ không bao giờ bị lỗi hiển thị!).
+Mình đã đổi toàn bộ mảng rỗng sang cú pháp new Array() để đảm bảo 0 lỗi đỏ trong VS Code. Bạn chỉ cần bấm nút Copy góc trên bên phải khung code, dán đè vào file index.html (Ctrl + A -> Ctrl + V), nhấn Ctrl + S (để mất dấu chấm tròn trắng trên tên file) rồi mở trình duyệt lên là chạy ngay!
+html
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Đua Người Que 2D - Gameplay & Sảnh Chờ</title>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; }
+        body {
+            margin: 0; background: #0f172a; color: #f8fafc;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            height: 100vh; overflow: hidden;
+        }
+        #hub-container {
+            position: relative; width: 1020px; height: 560px;
+            border-radius: 14px; overflow: hidden; border: 3px solid #334155;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+        }
+        canvas#hubCanvas { display: block; width: 100%; height: 100%; }
+        .hub-top-bar {
+            position: absolute; top: 12px; left: 14px; display: flex; gap: 10px; align-items: center;
+        }
+        .pill-badge {
+            background: rgba(15, 23, 42, 0.88); border: 2px solid #475569;
+            padding: 6px 14px; border-radius: 20px; font-weight: bold; font-size: 13px; color: #fff;
+        }
+        .players-leaderboard {
+            position: absolute; top: 12px; right: 14px; width: 225px;
+            background: rgba(15, 23, 42, 0.9); border-radius: 10px; overflow: hidden;
+            border: 2px solid #334155;
+        }
+        .lb-header {
+            background: linear-gradient(90deg, #65a30d, #84cc16);
+            color: #fff; font-weight: 900; font-size: 12px; padding: 5px 10px;
+            display: flex; justify-content: space-between; text-shadow: 1px 1px 0 #3f6212;
+        }
+        .lb-row {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 6px 10px; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 12px;
+        }
+        .lb-avatar {
+            width: 22px; height: 22px; border-radius: 50%; margin-right: 8px;
+            display: inline-flex; align-items: center; justify-content: center; font-weight: bold; color: #fff;
+        }
+        .voting-modal {
+            position: absolute; top: 48%; left: 45%; transform: translate(-50%, -50%);
+            width: 560px; background: #ffffff; border-radius: 16px;
+            border: 4px solid #cbd5e1; padding: 20px;
+            box-shadow: 0 18px 40px rgba(0,0,0,0.45); z-index: 5;
+        }
+        .voting-title {
+            position: absolute; top: -24px; left: 16px;
+            font-size: 34px; font-weight: 900; font-style: italic; letter-spacing: 1px;
+            color: #ffffff;
+            text-shadow: -2px -2px 0 #a855f7, 2px -2px 0 #a855f7, -2px 2px 0 #a855f7, 2px 2px 0 #a855f7, 0px 4px 0 #6b21a8;
+        }
+        .close-btn {
+            position: absolute; top: -14px; right: 12px;
+            background: #ef4444; color: #fff; border: 2px solid #7f1d1d;
+            border-radius: 6px; padding: 2px 12px; font-weight: 900; cursor: pointer;
+            box-shadow: 0 3px 0 #7f1d1d;
+        }
+        .vote-cards-grid {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 8px;
+        }
+        .vote-card {
+            position: relative; background: #f8fafc; border: 3px solid #94a3b8;
+            border-radius: 12px; padding: 8px; cursor: pointer; transition: 0.15s; text-align: center;
+        }
+        .vote-card:hover { transform: translateY(-3px); border-color: #38bdf8; }
+        .vote-card.my-vote { border-color: #22c55e; background: #f0fdf4; box-shadow: 0 0 12px rgba(34,197,94,0.5); }
+        .vote-count-badge {
+            position: absolute; top: 12px; right: 12px;
+            width: 24px; height: 24px; border-radius: 50%;
+            background: #84cc16; border: 2px solid #ffffff; color: #fff;
+            font-weight: 900; font-size: 13px; display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .vote-card canvas {
+            width: 100%; height: 135px; border-radius: 8px; background: #e2e8f0; display: block;
+        }
+        .vote-map-name { margin-top: 8px; font-weight: 800; font-size: 13px; color: #334155; }
+        .char-modal {
+            display: none; position: absolute; top: 48%; left: 45%; transform: translate(-50%, -50%);
+            width: 600px; background: #1e293b; border-radius: 16px; border: 4px solid #38bdf8;
+            padding: 20px; z-index: 6; box-shadow: 0 20px 50px rgba(0,0,0,0.7);
+        }
+        .char-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+        .char-box {
+            background: #0f172a; border: 3px solid #334155; border-radius: 12px; padding: 14px; cursor: pointer;
+        }
+        .char-box.active-blue { border-color: #38bdf8; background: #0c2438; }
+        .char-box.active-red { border-color: #ef4444; background: #2d1216; }
+        .hub-bottom-bar {
+            position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 12px; align-items: center; z-index: 4;
+        }
+        .action-btn {
+            border: 3px solid #0f172a; border-radius: 12px; padding: 10px 22px;
+            font-weight: 900; font-size: 14px; color: #fff; cursor: pointer;
+            box-shadow: 0 4px 0 #0f172a; transition: 0.1s;
+        }
+        .action-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #0f172a; }
+        .btn-vote { background: #a855f7; }
+        .btn-char { background: #0284c7; }
+        .btn-start { background: #22c55e; font-size: 15px; }
+        #game-wrapper { display: none; flex-direction: column; align-items: center; }
+        #hud {
+            width: 1020px; background: #1e293b; padding: 10px 18px; border-radius: 10px;
+            display: grid; grid-template-columns: 1.5fr 1.4fr 0.8fr 0.8fr 1.2fr 1.2fr; gap: 12px;
+            align-items: center; margin-bottom: 8px; border: 1px solid #334155;
+        }
+        .bar-bg { position: relative; width: 100%; height: 16px; background: #0f172a; border-radius: 8px; overflow: hidden; margin-top: 4px; }
+        #stamina-fill { width: 100%; height: 100%; background: #10b981; transition: width 0.05s; }
+        #stamina-fill.iframe-active { background: #22d3ee !important; box-shadow: 0 0 12px #22d3ee; }
+        #speed-fill { width: 0%; height: 100%; background: #34d399; transition: width 0.05s; }
+        .threshold-mark { position: absolute; left: 80%; top: 0; bottom: 0; width: 2px; background: #fff; z-index: 2; }
+        .hud-label { font-size: 11px; color: #94a3b8; font-weight: bold; display: flex; justify-content: space-between; }
+        .hud-val { font-size: 14px; font-weight: bold; margin-top: 2px; }
+        .canvas-container { position: relative; }
+        canvas#gameCanvas { border: 3px solid #334155; border-radius: 10px; display: block; }
+        canvas#minimap { position: absolute; bottom: 12px; right: 12px; background: rgba(15,23,42,0.88); border: 2px solid #475569; border-radius: 8px; }
+        .qe-indicator { display: flex; gap: 8px; margin-top: 8px; align-items: center; width: 1020px; }
+        .key-box { padding: 5px 14px; border-radius: 6px; background: #334155; font-weight: bold; border: 2px solid #475569; }
+        .key-box.next { background: #38bdf8; color: #0f172a; border-color: #fff; }
+        #buff-bar { margin-left: auto; display: flex; gap: 6px; }
+        .active-tag { padding: 3px 8px; border-radius: 5px; font-size: 12px; font-weight: bold; }
+        #result-modal {
+            display: none; position: absolute; background: rgba(15, 23, 42, 0.96);
+            padding: 30px 50px; border-radius: 16px; border: 3px solid #f43f5e; text-align: center; z-index: 20;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="hub-container">
+        <canvas id="hubCanvas" width="1020" height="560"></canvas>
+
+        <div class="hub-top-bar">
+            <div class="pill-badge" style="color:#fbbf24;">👑 CHẾ ĐỘ TEST GAMEPLAY</div>
+            <div class="pill-badge" style="color:#34d399;">Dùng WASD / Mũi tên để đi dạo trong sảnh</div>
+        </div>
+
+        <div class="players-leaderboard">
+            <div class="lb-header">
+                <span>Players</span>
+                <span>NHÂN VẬT</span>
+            </div>
+            <div id="lb-body"></div>
+        </div>
+
+        <div class="voting-modal" id="voting-modal">
+            <div class="voting-title">VOTING</div>
+            <button class="close-btn" onclick="toggleVotingModal(false)">X</button>
+            <div class="vote-cards-grid" id="vote-cards-container"></div>
+        </div>
+
+        <div class="char-modal" id="char-modal">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin:0; color:#38bdf8;">CHỌN NHÂN VẬT NGƯỜI QUE</h3>
+                <button class="close-btn" style="position:static;" onclick="toggleCharModal(false)">X</button>
+            </div>
+            <div class="char-options">
+                <div class="char-box active-blue" id="select-blue" onclick="chooseChar('blue')">
+                    <h4 style="color:#38bdf8; margin:0 0 6px 0;">🔵 Người Que Xanh Biển</h4>
+                    <p style="font-size:12px; color:#cbd5e1; margin:0; line-height:1.45;">
+                        <b>Ability [F]:</b> 1s hồi Stamina, 2s I-frames, +30% Speed (4s).<br>
+                        <b>Ultimate [G]:</b> 2s hồi Stamina, 4s I-frames, +50% Speed (4s).
+                    </p>
+                </div>
+                <div class="char-box" id="select-red" onclick="chooseChar('red')">
+                    <h4 style="color:#ef4444; margin:0 0 6px 0;">🔴 Người Que Đỏ</h4>
+                    <p style="font-size:12px; color:#cbd5e1; margin:0; line-height:1.45;">
+                        <b>Ability [F]:</b> 0.5s Stamina, 1s I-frames, +15% Speed (4s, cộng dồn). Va chạm húc choáng 1s & nhận thêm +2s I-frames, +15% Speed (2s, tối đa 2 lần).<br>
+Hãy thận trọng khi sử dụng mã.
+Ultimate [G]: 1s Stamina, 2s I-frames, +30% Speed (4s). Debuff Heavy & Silence (3s) lên kẻ bị húc & cộng dồn siêu buff.
+
+
+
+🗳️ BỎ PHIẾU MAP
+🏃 ĐỔI NHÂN VẬT
+🏁 BẮT ĐẦU ĐUA
+
+Stamina: 100%🛡️ I-FRAMES
+
+
+
+Vận tốc: 0
+
+
+Vòng / Hạng1/2 • #1
+Bức tốc [R]2 / 2
+Ability [F]Sẵn sàng
+Ultimate [G]Sạc (12.0s)
+Nhịp chạy:
+Q
+E
+
+
+
+QUAY LẠI SẢNH CHỜ
+const TOTAL_LAPS = 2;
+const SPEED_MULTIPLIER = 6.2;
+const ULT_UNLOCK_TIME = 12.0;
+const STAMINA_THRESHOLD = 80;
+const MAPS_CONFIG = {
+oval1: {
+name: "Sân Oval Chuẩn", bgGrass: "#4d9e48", trackColor: "#d6ccc2", trackWidth: 150,
+generatePoints: () => createStadiumPoints(1600, 900, 750, 320, 64),
+drawScenery: (ctx) => {
+ctx.fillStyle = "#475569"; ctx.fillRect(900, 260, 1400, 110);
+ctx.fillStyle = "#e11d48"; ctx.fillRect(1450, 320, 220, 50);
+ctx.fillStyle = "#334155";
+ctx.fillRect(1120, 740, 260, 320); ctx.fillRect(1420, 740, 240, 320); ctx.fillRect(1700, 740, 210, 320);
+ctx.strokeStyle = "#d6ccc2"; ctx.lineWidth = 18;
+ctx.beginPath(); ctx.ellipse(2120, 900, 150, 85, 0, 0, Math.PI * 2); ctx.stroke();
+ctx.beginPath(); ctx.ellipse(2120, 900, 70, 40, 0, 0, Math.PI * 2); ctx.stroke();
+}
+},
+valley2: {
+name: "Thung Lũng Đỏ", bgGrass: "#52793c", trackColor: "#d8cfc6", trackWidth: 145,
+generatePoints: () => createStadiumPoints(1600, 950, 720, 380, 64),
+drawScenery: (ctx) => {
+ctx.fillStyle = "#cbd5e1"; ctx.fillRect(1150, 250, 900, 130);
+ctx.fillStyle = "#7f1d1d"; ctx.fillRect(1450, 230, 300, 160);
+ctx.strokeStyle = "#d8cfc6"; ctx.lineWidth = 55;
+ctx.beginPath(); ctx.moveTo(920, 950); ctx.lineTo(750, 1450); ctx.stroke();
+ctx.strokeStyle = "#a39e93"; ctx.lineWidth = 14;
+ctx.beginPath(); ctx.moveTo(1000, 950); ctx.lineTo(2200, 950); ctx.stroke();
+}
+},
+long3: {
+name: "Đại Lộ Tốc Độ", bgGrass: "#5a8f49", trackColor: "#c99e93", trackWidth: 140,
+generatePoints: () => createStadiumPoints(2000, 850, 1250, 260, 72),
+drawScenery: (ctx) => {
+ctx.fillStyle = "#94a3b8"; ctx.fillRect(2350, 260, 360, 95);
+ctx.fillStyle = "#38bdf8"; ctx.fillRect(2450, 355, 220, 25);
+ctx.fillStyle = "#475569"; ctx.fillRect(850, 842, 1600, 16);
+ctx.fillStyle = "#b08978";
+ctx.beginPath(); ctx.ellipse(2920, 850, 220, 95, 0, 0, Math.PI * 2); ctx.fill();
+ctx.strokeStyle = "#e2d9d5"; ctx.lineWidth = 22; ctx.stroke();
+}
+},
+kawasaki4: {
+name: "Kawasaki Track", bgGrass: "#f8fafc", trackColor: "#65a30d", trackWidth: 145,
+generatePoints: () => {
+let pts = new Array();
+for (let i = 0; i < 72; i++) {
+let t = (i / 72) * Math.PI * 2;
+let x = 1600 + Math.cos(t) * 820;
+let y = 900 + Math.sin(t) * 320;
+if (Math.cos(t) < -0.5) x -= 60 * Math.abs(Math.cos(t));
+pts.push({ x, y });
+}
+return pts;
+},
+drawScenery: (ctx) => {
+ctx.fillStyle = "#65a30d"; ctx.fillRect(580, 1148, 450, 145);
+ctx.fillStyle = "#0f172a"; ctx.font = "bold 42px sans-serif";
+ctx.fillText("KAWASAKI RACECOURSE", 620, 380);
+ctx.font = "bold 24px sans-serif";
+ctx.fillText("1600m", 610, 1340); ctx.fillText("1500m", 950, 1340); ctx.fillText("2000m", 1950, 520);
+}
+},
+kyoto5: {
+name: "Kyoto Lake", bgGrass: "#438a3e", trackColor: "#d6ccc2", trackWidth: 145,
+generatePoints: () => createStadiumPoints(1600, 920, 760, 330, 64),
+drawScenery: (ctx) => {
+ctx.fillStyle = "#94a3b8"; ctx.fillRect(1100, 240, 950, 140);
+ctx.fillStyle = "#cbd5e1"; ctx.fillRect(2450, 480, 420, 480);
+ctx.fillStyle = "#d6ccc2"; ctx.fillRect(2150, 1178, 720, 145);
+ctx.fillStyle = "#3b82f6";
+ctx.beginPath(); ctx.ellipse(1600, 920, 460, 140, 0, 0, Math.PI * 2); ctx.fill();
+ctx.strokeStyle = "#93c5fd"; ctx.lineWidth = 8; ctx.stroke();
+ctx.fillStyle = "#15803d";
+ctx.beginPath(); ctx.arc(1600, 920, 42, 0, Math.PI * 2); ctx.fill();
+ctx.save(); ctx.translate(920, 1140); ctx.rotate(0.65);
+ctx.fillStyle = "#7f1d1d"; ctx.font = "bold 34px sans-serif"; ctx.fillText("KYOTO", 0, 0);
+ctx.restore();
+}
+}
+};
+function createStadiumPoints(cx, cy, straightHalf, radius, numPts) {
+let pts = new Array();
+for (let i = 0; i < numPts; i++) {
+let angle = (i / numPts) * Math.PI * 2;
+let x = cx + Math.sign(Math.cos(angle)) * Math.pow(Math.abs(Math.cos(angle)), 0.72) * (straightHalf + radius);
+let y = cy + Math.sin(angle) * radius;
+pts.push({ x, y });
+}
+return pts;
+}
+class Track {
+constructor(config) {
+this.config = config;
+this.points = config.generatePoints();
+this.cumulativeLengths = new Array(0);
+this.totalLength = 0;
+for (let i = 0; i < this.points.length; i++) {
+let p1 = this.points[i], p2 = this.points[(i + 1) % this.points.length];
+this.totalLength += Math.hypot(p2.x - p1.x, p2.y - p1.y);
+this.cumulativeLengths.push(this.totalLength);
+}
+}
+getPositionAt(distance, laneOffset) {
+let d = ((distance % this.totalLength) + this.totalLength) % this.totalLength;
+let idx = 0;
+for (let i = 0; i < this.cumulativeLengths.length - 1; i++) {
+if (d >= this.cumulativeLengths[i] && d <= this.cumulativeLengths[i + 1]) { idx = i; break; }
+}
+let p1 = this.points[idx], p2 = this.points[(idx + 1) % this.points.length];
+let segLen = this.cumulativeLengths[idx + 1] - this.cumulativeLengths[idx];
+let t = segLen > 0 ? (d - this.cumulativeLengths[idx]) / segLen : 0;
+let angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+return {
+x: p1.x + (p2.x - p1.x) * t + (-Math.sin(angle)) * laneOffset,
+y: p1.y + (p2.y - p1.y) * t + Math.cos(angle) * laneOffset,
+angle
+};
+}
+draw(ctx) {
+ctx.fillStyle = this.config.bgGrass;
+ctx.fillRect(0, 0, 3600, 1900);
+this.config.drawScenery(ctx);
+ctx.lineJoin = "round"; ctx.lineCap = "round";
+ctx.strokeStyle = "#ffffff"; ctx.lineWidth = this.config.trackWidth + 12;
+this.strokePath(ctx);
+ctx.strokeStyle = this.config.trackColor; ctx.lineWidth = this.config.trackWidth;
+this.strokePath(ctx);
+ctx.strokeStyle = "rgba(255,255,255,0.35)"; ctx.lineWidth = 3;
+ctx.setLineDash(new Array(15, 15)); this.strokePath(ctx); ctx.setLineDash(new Array());
+let startPos = this.getPositionAt(0, 0);
+ctx.save(); ctx.translate(startPos.x, startPos.y); ctx.rotate(startPos.angle);
+let w = this.config.trackWidth;
+for (let row = -w / 2; row < w / 2; row += 15) {
+ctx.fillStyle = (Math.floor(row / 15) % 2 === 0) ? "#ffffff" : "#0f172a";
+ctx.fillRect(-8, row, 8, 15);
+ctx.fillStyle = (Math.floor(row / 15) % 2 === 0) ? "#0f172a" : "#ffffff";
+ctx.fillRect(0, row, 8, 15);
+}
+ctx.restore();
+}
+strokePath(ctx) {
+ctx.beginPath();
+this.points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+ctx.closePath(); ctx.stroke();
+}
+}
+let myCharType = 'blue';
+let voteCandidates = new Array();
+let myVotedMap = null;
+let botVotes = {};
+let isInHub = true;
+let hubKeys = {};
+let hubPlayers = new Array(
+{ id: 'me', name: 'BẠN', charType: 'blue', x: 510, y: 310, isMe: true },
+{ id: 'b1', name: 'Bot Đỏ 1', charType: 'red', x: 420, y: 270, isMe: false },
+{ id: 'b2', name: 'Bot Xanh 2', charType: 'blue', x: 600, y: 280, isMe: false },
+{ id: 'b3', name: 'Bot Đỏ 3', charType: 'red', x: 470, y: 365, isMe: false }
+);
+function initHub() {
+const allIds = Object.keys(MAPS_CONFIG);
+voteCandidates = allIds.slice().sort(() => 0.5 - Math.random()).slice(0, 3);
+myVotedMap = voteCandidates.at(0);
+botVotes = {
+b1: voteCandidates.at(Math.floor(Math.random() * 3)),
+b2: voteCandidates.at(Math.floor(Math.random() * 3)),
+b3: voteCandidates.at(Math.floor(Math.random() * 3))
+};
+renderHubUI();
+}
+function toggleVotingModal(show) {
+document.getElementById('voting-modal').style.display = show ? 'block' : 'none';
+if (show) document.getElementById('char-modal').style.display = 'none';
+}
+function toggleCharModal(show) {
+document.getElementById('char-modal').style.display = show ? 'block' : 'none';
+if (show) document.getElementById('voting-modal').style.display = 'none';
+}
+function chooseChar(type) {
+myCharType = type;
+hubPlayers.at(0).charType = type;
+document.getElementById('select-blue').className = 'char-box' + (type === 'blue' ? ' active-blue' : '');
+document.getElementById('select-red').className = 'char-box' + (type === 'red' ? ' active-red' : '');
+toggleCharModal(false);
+renderHubUI();
+}
+function castVote(mapId) {
+myVotedMap = mapId;
+renderHubUI();
+}
+function renderHubUI() {
+const lbBody = document.getElementById('lb-body');
+lbBody.innerHTML = '';
+hubPlayers.forEach(p => {
+const bgCol = p.charType === 'blue' ? '#0284c7' : '#dc2626';
+lbBody.innerHTML += <div class="lb-row"> <div style="display:flex; align-items:center;"> <span class="lb-avatar" style="background:${bgCol};">${p.name.charAt(0)}</span> <span style="font-weight:bold; color:${p.isMe ? '#fbbf24' : '#fff'}">${p.name}</span> </div> <span style="font-weight:bold; color:${p.charType === 'blue' ? '#38bdf8' : '#f87171'}"> ${p.charType === 'blue' ? 'Xanh Biển' : 'Đỏ'} </span> </div>;
+});
+const counts = {};
+voteCandidates.forEach(m => counts[m] = 0);
+if (myVotedMap && counts[myVotedMap] !== undefined) counts[myVotedMap]++;
+Object.values(botVotes).forEach(m => { if (counts[m] !== undefined) counts[m]++; });
+const container = document.getElementById('vote-cards-container');
+container.innerHTML = '';
+voteCandidates.forEach(mapId => {
+const cfg = MAPS_CONFIG[mapId];
+const card = document.createElement('div');
+card.className = 'vote-card' + (myVotedMap === mapId ? ' my-vote' : '');
+card.onclick = () => castVote(mapId);
+card.innerHTML = <div class="vote-count-badge">${counts[mapId]}</div> <canvas id="thumb-${mapId}" width="160" height="135"></canvas> <div class="vote-map-name">${cfg.name}</div>;
+container.appendChild(card);
+const c = document.getElementById(thumb-${mapId}).getContext('2d');
+c.fillStyle = cfg.bgGrass; c.fillRect(0, 0, 160, 135);
+c.fillStyle = "#64748b"; c.fillRect(35, 10, 90, 15);
+c.fillStyle = "#ef4444"; c.fillRect(65, 8, 30, 17);
+const pts = cfg.generatePoints();
+const sx = 160 / 3300, sy = 110 / 1850;
+c.save(); c.translate(0, 20);
+c.strokeStyle = "#fff"; c.lineWidth = 10;
+c.beginPath(); pts.forEach((p, i) => i === 0 ? c.moveTo(p.x * sx, p.y * sy) : c.lineTo(p.x * sx, p.y * sy)); c.closePath(); c.stroke();
+c.strokeStyle = cfg.trackColor; c.lineWidth = 7; c.stroke();
+c.restore();
+});
+}
+const hubCanvas = document.getElementById('hubCanvas');
+const hubCtx = hubCanvas.getContext('2d');
+function hubLoop() {
+if (!isInHub) return;
+const me = hubPlayers.at(0);
+const speed = 4.2;
+if (hubKeys['KeyW'] || hubKeys['ArrowUp']) me.y = Math.max(90, me.y - speed);
+if (hubKeys['KeyS'] || hubKeys['ArrowDown']) me.y = Math.min(480, me.y + speed);
+if (hubKeys['KeyA'] || hubKeys['ArrowLeft']) me.x = Math.max(60, me.x - speed);
+if (hubKeys['KeyD'] || hubKeys['ArrowRight']) me.x = Math.min(960, me.x + speed);
+hubCtx.fillStyle = "#e2e8f0";
+hubCtx.fillRect(0, 0, hubCanvas.width, hubCanvas.height);
+hubCtx.strokeStyle = "#cbd5e1"; hubCtx.lineWidth = 1.5;
+for (let x = -200; x < 1200; x += 65) {
+hubCtx.beginPath(); hubCtx.moveTo(x, 0); hubCtx.lineTo(x + 180, hubCanvas.height); hubCtx.stroke();
+}
+for (let y = 0; y < hubCanvas.height; y += 55) {
+hubCtx.beginPath(); hubCtx.moveTo(0, y); hubCtx.lineTo(hubCanvas.width, y); hubCtx.stroke();
+}
+hubCtx.fillStyle = "#1d4ed8"; hubCtx.fillRect(0, 110, hubCanvas.width, 28);
+hubCtx.fillStyle = "#eab308"; hubCtx.fillRect(0, 104, hubCanvas.width, 6); hubCtx.fillRect(0, 138, hubCanvas.width, 6);
+hubCtx.save();
+hubCtx.translate(510, 310);
+hubCtx.scale(1.45, 0.85);
+hubCtx.fillStyle = "#eab308"; hubCtx.beginPath(); hubCtx.arc(0, 0, 185, 0, Math.PI * 2); hubCtx.fill();
+hubCtx.fillStyle = "#1e40af"; hubCtx.beginPath(); hubCtx.arc(0, 0, 162, 0, Math.PI * 2); hubCtx.fill();
+hubCtx.fillStyle = "#facc15";
+hubCtx.beginPath();
+hubCtx.moveTo(-65, 35); hubCtx.lineTo(-80, -35); hubCtx.lineTo(-30, 0);
+hubCtx.lineTo(0, -55); hubCtx.lineTo(30, 0); hubCtx.lineTo(80, -35); hubCtx.lineTo(65, 35);
+hubCtx.closePath(); hubCtx.fill();
+hubCtx.fillRect(-65, 42, 130, 16);
+hubCtx.restore();
+hubPlayers.forEach(p => {
+const col = p.charType === 'blue' ? '#0284c7' : '#ef4444';
+hubCtx.save();
+hubCtx.translate(p.x, p.y);
+hubCtx.fillStyle = "rgba(0,0,0,0.2)";
+hubCtx.beginPath(); hubCtx.ellipse(0, 22, 14, 6, 0, 0, Math.PI * 2); hubCtx.fill();
+hubCtx.strokeStyle = col; hubCtx.fillStyle = col; hubCtx.lineWidth = 4; hubCtx.lineCap = "round";
+hubCtx.beginPath(); hubCtx.arc(0, -16, 8, 0, Math.PI * 2); hubCtx.fill();
+hubCtx.beginPath(); hubCtx.moveTo(0, -8); hubCtx.lineTo(0, 10); hubCtx.stroke();
+hubCtx.beginPath(); hubCtx.moveTo(-11, 2); hubCtx.lineTo(0, -4); hubCtx.lineTo(11, 2); hubCtx.stroke();
+hubCtx.beginPath(); hubCtx.moveTo(-8, 22); hubCtx.lineTo(0, 10); hubCtx.lineTo(8, 22); hubCtx.stroke();
+hubCtx.font = "bold 13px sans-serif"; hubCtx.textAlign = "center";
+hubCtx.strokeStyle = "#0f172a"; hubCtx.lineWidth = 3;
+hubCtx.strokeText(p.name, 0, -30);
+hubCtx.fillStyle = p.isMe ? "#fbbf24" : "#ffffff";
+hubCtx.fillText(p.name, 0, -30);
+hubCtx.restore();
+});
+requestAnimationFrame(hubLoop);
+}
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const miniCanvas = document.getElementById('minimap');
+const miniCtx = miniCanvas.getContext('2d');
+let gameState = 'HUB';
+let runners = new Array();
+let player = null;
+let currentTrack = null;
+let lastTime = 0;
+let raceTime = 0;
+let logTimeout = null;
+function showLog(msg) {
+const el = document.getElementById('event-log');
+el.innerText = msg;
+clearTimeout(logTimeout);
+logTimeout = setTimeout(() => el.innerText = '', 2800);
+}
+window.addEventListener('keydown', (e) => {
+hubKeys[e.code] = true;
+if (gameState !== 'PLAYING' || e.repeat) return;
+if (e.code === 'KeyQ' || e.code === 'KeyE') player.handleStride(e.code);
+else if (e.code === 'KeyR') player.useSprint();
+else if (e.code === 'KeyF') player.useAbility();
+else if (e.code === 'KeyG') player.useUltimate();
+});
+window.addEventListener('keyup', (e) => { hubKeys[e.code] = false; });
+class StickmanRunner {
+constructor(name, color, laneIndex, isPlayer, charType) {
+this.name = name;
+this.color = color;
+this.laneOffset = -36 + laneIndex * 24;
+this.isPlayer = isPlayer;
+this.charType = charType;
+this.distance = 0;
+this.baseVelocity = 0;
+this.stamina = 100;
+this.exhausted = false;
+this.animPhase = 0;
+this.lastStepKey = null;
+this.sprintsLeft = 2;
+this.sprintTimer = 0;
+this.abilityUsed = false;
+this.ultUsed = false;
+this.speedBuffs = new Array();
+this.staminaIframeTimer = 0;
+this.activeRegenTimer = 0;
+this.redChargeTimer = 0;
+this.redHitCount = 0;
+this.hitTargets = new Set();
+this.stunTimer = 0;
+this.heavyTimer = 0;
+this.silenceTimer = 0;
+}
+addIframes(sec) { this.staminaIframeTimer += sec; }
+addActiveRegen(sec) { this.activeRegenTimer += sec; }
+addSpeedBuff(pct, duration) { this.speedBuffs.push({ pct, timer: duration }); }
+getTotalSpeedBonus() { return this.speedBuffs.reduce((sum, b) => sum + b.pct, 0); }
+getEffectiveVelocity() {
+if (this.stunTimer > 0) return 0;
+let vel = this.sprintTimer > 0 ? 120 : this.baseVelocity;
+return vel * (1 + this.getTotalSpeedBonus());
+}
+handleStride(key) {
+if (this.exhausted || this.stunTimer > 0) return;
+if (this.heavyTimer > 0) {
+if (this.isPlayer) showLog("⛓️ BỊ HEAVY! Không thể tăng tốc!");
+return;
+}
+if (this.lastStepKey !== key) {
+this.lastStepKey = key;
+this.baseVelocity = Math.min(100, this.baseVelocity + 7.8);
+if (this.isPlayer) {
+document.getElementById('key-q').classList.toggle('next', key === 'KeyE');
+document.getElementById('key-e').classList.toggle('next', key === 'KeyQ');
+}
+}
+}
+useSprint() {
+if (this.sprintsLeft <= 0 || this.sprintTimer > 0 || this.exhausted || this.stunTimer > 0) return;
+if (this.heavyTimer > 0) {
+if (this.isPlayer) showLog("⛓️ BỊ HEAVY! Không thể Bức tốc!");
+return;
+}
+this.sprintsLeft--;
+this.sprintTimer = 1.6;
+if (this.isPlayer) showLog("🔥 BỨC TỐC KÍCH HOẠT!");
+}
+useAbility() {
+if (this.abilityUsed || this.exhausted || this.stunTimer > 0) return;
+if (this.silenceTimer > 0) {
+if (this.isPlayer) showLog("🔇 BỊ SILENCE! Không thể dùng Ability!");
+return;
+}
+this.abilityUsed = true;
+if (this.charType === 'blue') {
+this.addActiveRegen(1.0);
+this.addIframes(2.0);
+this.addSpeedBuff(0.30, 4.0);
+if (this.isPlayer) showLog("🔵 ABILITY: +1s Hồi Stamina | +2s I-frames | +30% Speed (4s)!");
+} else if (this.charType === 'red') {
+this.addActiveRegen(0.5);
+this.addIframes(1.0);
+this.addSpeedBuff(0.15, 4.0);
+this.redChargeTimer = 4.0;
+this.redHitCount = 0;
+this.hitTargets.clear();
+if (this.isPlayer) showLog("🔴 ABILITY: Càn lướt 4s! Va vào đối thủ để húc choáng & cộng dồn buff!");
+}
+}
+useUltimate() {
+if (raceTime < ULT_UNLOCK_TIME || this.ultUsed || this.exhausted || this.stunTimer > 0) return;
+if (this.silenceTimer > 0) {
+if (this.isPlayer) showLog("🔇 BỊ SILENCE! Không thể dùng Ultimate!");
+return;
+}
+this.ultUsed = true;
+if (this.charType === 'blue') {
+this.addActiveRegen(2.0);
+this.addIframes(4.0);
+this.addSpeedBuff(0.50, 4.0);
+if (this.isPlayer) showLog("🔵 ULTIMATE: +2s Hồi Stamina | +4s I-frames | +50% Speed (4s)!");
+} else if (this.charType === 'red') {
+this.addActiveRegen(1.0);
+this.addIframes(2.0);
+this.addSpeedBuff(0.30, 4.0);
+let debuffedCount = 0;
+this.hitTargets.forEach(target => {
+target.heavyTimer = 3.0;
+target.silenceTimer = 3.0;
+debuffedCount++;
+this.addActiveRegen(0.5);
+this.addIframes(2.0);
+this.addSpeedBuff(0.20, 2.0);
+});
+if (this.isPlayer) {
+showLog(debuffedCount > 0
+? 🔴 ULTIMATE: Debuff Heavy & Silence lên ${debuffedCount} mục tiêu! Cộng dồn siêu buff!
+: "🔴 ULTIMATE: +1s Stamina, +2s I-frames, +30% Speed!");
+}
+}
+}
+update(dt) {
+if (this.sprintTimer > 0) this.sprintTimer = Math.max(0, this.sprintTimer - dt);
+if (this.staminaIframeTimer > 0) this.staminaIframeTimer = Math.max(0, this.staminaIframeTimer - dt);
+if (this.activeRegenTimer > 0) this.activeRegenTimer = Math.max(0, this.activeRegenTimer - dt);
+if (this.redChargeTimer > 0) this.redChargeTimer = Math.max(0, this.redChargeTimer - dt);
+if (this.stunTimer > 0) this.stunTimer = Math.max(0, this.stunTimer - dt);
+if (this.heavyTimer > 0) this.heavyTimer = Math.max(0, this.heavyTimer - dt);
+if (this.silenceTimer > 0) this.silenceTimer = Math.max(0, this.silenceTimer - dt);
+for (let i = this.speedBuffs.length - 1; i >= 0; i--) {
+this.speedBuffs[i].timer -= dt;
+if (this.speedBuffs[i].timer <= 0) this.speedBuffs.splice(i, 1);
+}
+if (this.charType === 'red' && this.redChargeTimer > 0) {
+runners.forEach(other => {
+if (other !== this && !this.hitTargets.has(other)) {
+if (Math.abs(this.distance - other.distance) <= 55) {
+this.hitTargets.add(other);
+other.stunTimer = 1.0;
+if (this.redHitCount < 2) {
+this.redHitCount++;
+this.addIframes(2.0);
+this.addSpeedBuff(0.15, 2.0);
+}
+if (this.isPlayer) showLog(💥 HÚC TRÚNG ${other.name.toUpperCase()}! Choáng 1s | Cộng dồn buff (${this.redHitCount}/2)!);
+}
+}
+});
+}
+if (!this.isPlayer) this.updateAI(dt);
+if (this.stunTimer > 0) this.baseVelocity = 0;
+else this.baseVelocity = Math.max(0, this.baseVelocity - 24 * dt);
+let effectiveVel = this.getEffectiveVelocity();
+if (this.activeRegenTimer > 0) {
+this.stamina = Math.min(100, this.stamina + 28 * dt);
+if (this.exhausted && this.stamina >= 30) this.exhausted = false;
+}
+if (effectiveVel > STAMINA_THRESHOLD) {
+if (this.staminaIframeTimer <= 0) {
+let overSpeed = effectiveVel - STAMINA_THRESHOLD;
+let drainRate = (2.5 + Math.pow(overSpeed, 1.42) * 0.32);
+this.stamina -= drainRate * dt;
+if (this.stamina <= 0) {
+this.stamina = 0; this.baseVelocity = 0; effectiveVel = 0; this.exhausted = true;
+if (this.isPlayer) showLog("⚠️ KIỆT SỨC! Stamina = 0, vận tốc về 0!");
+}
+}
+} else if (effectiveVel < STAMINA_THRESHOLD) {
+let slowRatio = (STAMINA_THRESHOLD - effectiveVel) / STAMINA_THRESHOLD;
+let regenRate = 2 + Math.pow(slowRatio, 1.3) * 22;
+this.stamina = Math.min(100, this.stamina + regenRate * dt);
+if (this.exhausted && this.stamina >= 30) this.exhausted = false;
+}
+this.distance += effectiveVel * SPEED_MULTIPLIER * dt;
+if (effectiveVel > 5) this.animPhase += (effectiveVel * 0.22) * dt;
+}
+updateAI(dt) {
+if (this.exhausted || this.stunTimer > 0) return;
+if (this.heavyTimer <= 0) {
+let targetSpeed = this.stamina > 30 ? 90 : 55;
+if (this.staminaIframeTimer > 0) targetSpeed = 100;
+if (this.baseVelocity < targetSpeed) this.baseVelocity = Math.min(100, this.baseVelocity + 55 * dt);
+}
+let totalTarget = currentTrack.totalLength * TOTAL_LAPS;
+if (!this.abilityUsed && this.distance > totalTarget * 0.28) this.useAbility();
+if (raceTime >= ULT_UNLOCK_TIME && !this.ultUsed && this.distance > totalTarget * 0.58) this.useUltimate();
+if (this.distance > totalTarget * 0.82 && this.sprintsLeft > 0) this.useSprint();
+}
+draw(ctx) {
+let pos = currentTrack.getPositionAt(this.distance, this.laneOffset);
+ctx.save();
+ctx.translate(pos.x, pos.y);
+if (this.redChargeTimer > 0) {
+ctx.strokeStyle = 'rgba(239, 68, 68, 0.85)'; ctx.lineWidth = 3;
+ctx.beginPath(); ctx.arc(0, 0, 32, 0, Math.PI * 2); ctx.stroke();
+ctx.fillStyle = 'rgba(239, 68, 68, 0.18)'; ctx.fill();
+}
+if (this.staminaIframeTimer > 0) {
+ctx.strokeStyle = '#22d3ee'; ctx.lineWidth = 2.5;
+ctx.beginPath(); ctx.arc(0, 0, 26, 0, Math.PI * 2); ctx.stroke();
+ctx.fillStyle = 'rgba(34, 211, 238, 0.18)'; ctx.fill();
+}
+ctx.save();
+ctx.rotate(pos.angle);
+let drawColor = this.exhausted ? '#64748b' : this.color;
+ctx.strokeStyle = drawColor; ctx.fillStyle = drawColor;
+ctx.lineWidth = 3.2; ctx.lineCap = 'round';
+let swing = Math.sin(this.animPhase) * 11;
+ctx.beginPath();
+ctx.moveTo(-4, 0); ctx.lineTo(-4 + swing, -9);
+ctx.moveTo(-4, 0); ctx.lineTo(-4 - swing, 9);
+ctx.moveTo(-8, 0); ctx.lineTo(6, 0);
+ctx.moveTo(2, 0); ctx.lineTo(2 - swing * 0.8, -10);
+ctx.moveTo(2, 0); ctx.lineTo(2 + swing * 0.8, 10);
+ctx.stroke();
+ctx.beginPath(); ctx.arc(11, 0, 5.5, 0, Math.PI * 2); ctx.fill();
+ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.2; ctx.stroke();
+ctx.restore();
+ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
+ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 3;
+let statusText = this.name;
+if (this.stunTimer > 0) statusText += ' [💫 CHOÁNG]';
+else if (this.heavyTimer > 0 || this.silenceTimer > 0) statusText += ' [⛓️🔇 DEBUFF]';
+else if (this.exhausted) statusText += ' [💤 KIỆT SỨC]';
+ctx.strokeText(statusText, 0, -24);
+ctx.fillStyle = (this.stunTimer > 0 || this.heavyTimer > 0) ? '#fb7185' : '#ffffff';
+ctx.fillText(statusText, 0, -24);
+ctx.restore();
+}
+}
+function startRace() {
+const counts = {};
+voteCandidates.forEach(m => counts[m] = 0);
+if (myVotedMap && counts[myVotedMap] !== undefined) counts[myVotedMap]++;
+Object.values(botVotes).forEach(m => { if (counts[m] !== undefined) counts[m]++; });
+let winningMap = voteCandidates.at(0), maxV = -1;
+for (const [m, c] of Object.entries(counts)) {
+if (c > maxV) { maxV = c; winningMap = m; }
+}
+isInHub = false;
+document.getElementById('hub-container').style.display = 'none';
+document.getElementById('result-modal').style.display = 'none';
+document.getElementById('game-wrapper').style.display = 'flex';
+currentTrack = new Track(MAPS_CONFIG[winningMap]);
+raceTime = 0;
+player = new StickmanRunner(
+myCharType === 'blue' ? 'BẠN (Xanh Biển)' : 'BẠN (Đỏ)',
+myCharType === 'blue' ? '#38bdf8' : '#ef4444',
+0, true, myCharType
+);
+runners = new Array(
+player,
+new StickmanRunner('Bot Đỏ 1', '#ef4444', 1, false, 'red'),
+new StickmanRunner('Bot Xanh 2', '#0284c7', 2, false, 'blue'),
+new StickmanRunner('Bot Đỏ 3', '#dc2626', 3, false, 'red')
+);
+gameState = 'PLAYING';
+lastTime = performance.now();
+requestAnimationFrame(gameLoop);
+}
+function returnToHub() {
+gameState = 'HUB';
+isInHub = true;
+document.getElementById('game-wrapper').style.display = 'none';
+document.getElementById('result-modal').style.display = 'none';
+document.getElementById('hub-container').style.display = 'block';
+initHub();
+requestAnimationFrame(hubLoop);
+}
+function drawMinimap() {
+miniCtx.clearRect(0, 0, miniCanvas.width, miniCanvas.height);
+let scaleX = miniCanvas.width / 3400, scaleY = miniCanvas.height / 1850;
+miniCtx.strokeStyle = "#94a3b8"; miniCtx.lineWidth = 6;
+miniCtx.beginPath();
+currentTrack.points.forEach((p, i) => i === 0 ? miniCtx.moveTo(p.x * scaleX, p.y * scaleY) : miniCtx.lineTo(p.x * scaleX, p.y * scaleY));
+miniCtx.closePath(); miniCtx.stroke();
+runners.forEach(r => {
+let pos = currentTrack.getPositionAt(r.distance, 0);
+miniCtx.fillStyle = r.color;
+miniCtx.beginPath(); miniCtx.arc(pos.x * scaleX, pos.y * scaleY, r.isPlayer ? 5 : 3.5, 0, Math.PI * 2); miniCtx.fill();
+});
+}
+function updateHUD() {
+document.getElementById('stamina-num').innerText = Math.round(player.stamina);
+const fill = document.getElementById('stamina-fill');
+const iframeBadge = document.getElementById('iframe-badge');
+fill.style.width = player.stamina + '%';
+if (player.staminaIframeTimer > 0) {
+fill.classList.add('iframe-active');
+iframeBadge.style.display = 'inline';
+iframeBadge.innerText = 🛡️ I-FRAMES (${player.staminaIframeTimer.toFixed(1)}s);
+} else {
+fill.classList.remove('iframe-active');
+iframeBadge.style.display = 'none';
+fill.style.background = player.exhausted ? '#ef4444' : 'linear-gradient(90deg, #10b981, #34d399)';
+}
+let effVel = Math.round(player.getEffectiveVelocity());
+let bonusPct = Math.round(player.getTotalSpeedBonus() * 100);
+document.getElementById('speed-num').innerText = effVel;
+document.getElementById('buff-speed-text').innerText = bonusPct > 0 ? +${bonusPct}% BUFF : '';
+const speedFill = document.getElementById('speed-fill');
+speedFill.style.width = Math.min(100, effVel) + '%';
+if (player.staminaIframeTimer > 0 && effVel > STAMINA_THRESHOLD) speedFill.style.background = '#22d3ee';
+else if (effVel > STAMINA_THRESHOLD) speedFill.style.background = '#f43f5e';
+else speedFill.style.background = '#34d399';
+let currentLap = Math.min(TOTAL_LAPS, Math.floor(player.distance / currentTrack.totalLength) + 1);
+let sorted = runners.slice().sort((a, b) => b.distance - a.distance);
+let rank = sorted.indexOf(player) + 1;
+document.getElementById('lap-num').innerText = ${currentLap}/${TOTAL_LAPS};
+document.getElementById('rank-num').innerText = rank;
+document.getElementById('sprint-num').innerText = ${player.sprintsLeft} / 2;
+const abEl = document.getElementById('ability-status');
+if (player.silenceTimer > 0) { abEl.innerText = 🔇 SILENCE (${player.silenceTimer.toFixed(1)}s); abEl.style.color = '#fb7185'; }
+else if (!player.abilityUsed) { abEl.innerText = 'Sẵn sàng [F]'; abEl.style.color = '#34d399'; }
+else { abEl.innerText = 'Đã dùng'; abEl.style.color = '#64748b'; }
+const ultEl = document.getElementById('ult-status');
+if (player.silenceTimer > 0) { ultEl.innerText = 🔇 SILENCE (${player.silenceTimer.toFixed(1)}s); ultEl.style.color = '#fb7185'; }
+else if (player.ultUsed) { ultEl.innerText = 'Đã dùng'; ultEl.style.color = '#64748b'; }
+else if (raceTime < ULT_UNLOCK_TIME) { ultEl.innerText = Sau ${(ULT_UNLOCK_TIME - raceTime).toFixed(1)}s; ultEl.style.color = '#94a3b8'; }
+else { ultEl.innerText = 'SẴN SÀNG [G]!'; ultEl.style.color = '#f43f5e'; }
+const buffBar = document.getElementById('buff-bar');
+let tagsHTML = '';
+if (player.activeRegenTimer > 0) tagsHTML += <span class="active-tag" style="background:#065f46; color:#34d399;">+Hồi Sức ${player.activeRegenTimer.toFixed(1)}s</span>;
+if (bonusPct > 0) tagsHTML += <span class="active-tag" style="background:#78350f; color:#fbbf24;">+${bonusPct}% Speed</span>;
+if (player.redChargeTimer > 0) tagsHTML += <span class="active-tag" style="background:#7f1d1d; color:#fca5a5;">Càn Lướt (${player.redHitCount}/2)</span>;
+if (player.heavyTimer > 0) tagsHTML += <span class="active-tag" style="background:#881337; color:#fda4af;">⛓️ HEAVY ${player.heavyTimer.toFixed(1)}s</span>;
+buffBar.innerHTML = tagsHTML;
+}
+function gameLoop(now) {
+if (gameState !== 'PLAYING') return;
+let dt = (now - lastTime) / 1000;
+lastTime = now;
+raceTime += dt;
+let finishDistance = currentTrack.totalLength * TOTAL_LAPS;
+runners.forEach(r => {
+r.update(dt);
+if (r.distance >= finishDistance && gameState === 'PLAYING') {
+gameState = 'FINISHED';
+showResult(r);
+}
+});
+let playerPos = currentTrack.getPositionAt(player.distance, player.laneOffset);
+ctx.clearRect(0, 0, canvas.width, canvas.height);
+ctx.save();
+ctx.translate(-(playerPos.x - canvas.width / 2), -(playerPos.y - canvas.height / 2));
+currentTrack.draw(ctx);
+runners.forEach(r => r.draw(ctx));
+ctx.restore();
+drawMinimap();
+updateHUD();
+if (gameState === 'PLAYING') requestAnimationFrame(gameLoop);
+}
+function showResult(winner) {
+const modal = document.getElementById('result-modal');
+const title = document.getElementById('result-title');
+const desc = document.getElementById('result-desc');
+if (winner === player) {
+title.innerText = '🏆 CHIẾN THẮNG CHUNG CUỘC!';
+title.style.color = '#34d399';
+desc.innerText = Bạn đã về đích đầu tiên sau ${raceTime.toFixed(2)} giây!;
+} else {
+title.innerText = 😢 ${winner.name.toUpperCase()} VỀ ĐÍCH TRƯỚC!;
+title.style.color = '#f43f5e';
+desc.innerText = Thời gian: ${raceTime.toFixed(2)} giây. Hãy thử lại chiến thuật khác nhé!;
+}
+modal.style.display = 'block';
+}
+initHub();
+requestAnimationFrame(hubLoop);
+
+
+
+<FollowUp>
+Lưu ý khi dán vào VS Code:
+1. Bấm biểu tượng **Copy** ở góc trên bên phải hộp code (không kéo chuột bôi đen).
+2. Trên VS Code, chọn đúng tab `index.html` trong thư mục `stickboi`, nhấn `Ctrl + A` -> `Ctrl + V` -> `Ctrl + S`.
+3. Kiểm tra góc dưới bên trái VS Code: biểu tượng `⊗` báo **0 lỗi** là game chạy mượt trên trình duyệt! Test xong bạn nhắn **"tiếp"** để mình làm phần Server nhé.
+</FollowUp>
